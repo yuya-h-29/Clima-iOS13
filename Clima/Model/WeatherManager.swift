@@ -8,15 +8,22 @@
 
 import Foundation
 
+protocol WeatherManagerDelegate {
+    func didUpdateWeather(_ weatherManager: WeatherManager, weather: WeatherModel)
+    func didFailWithError(error: Error)
+}
+
 struct WeatherManager {
     let weatherURL = "https://api.openweathermap.org/data/2.5/weather?appid=bf34339e60550c61392c04f598f14058&units=metric"
     
+    var delegate: WeatherManagerDelegate?
+    
     func fetchWeather (cityName: String){
         let urlString = "\(weatherURL)&q=\(cityName)"
-        performRequest(urlString: urlString)
+        performRequest(with: urlString)
     }
     
-    func performRequest (urlString: String){
+    func performRequest (with urlString: String){
         
         // 1. create a url
         if let url = URL(string: urlString) {
@@ -27,12 +34,14 @@ struct WeatherManager {
             //3. give the session a task
             let task = session.dataTask(with: url) { (data, response, error) in
                 if error != nil {
-                    print(error!)
+                    self.delegate?.didFailWithError(error: error!)
                     return
                 }
                 
                 if let safeData = data {
-                    self.parseJSON(weatherData: safeData)
+                    if let weather = self.parseJSON(safeData){
+                        self.delegate?.didUpdateWeather(self, weather: weather)
+                    }
                 }
             }
             
@@ -41,49 +50,25 @@ struct WeatherManager {
         }
     }
     
-    func parseJSON(weatherData: Data) {
+    func parseJSON(_ weatherData: Data) -> WeatherModel? {
         let decoder = JSONDecoder()
         
         do {
             let decodedData = try decoder.decode(WeatherData.self, from: weatherData)
-//            print(decodedData.main.temp)
-//            print(decodedData.weather[0].id)
             
             let id = decodedData.weather[0].id
-            print(getConditionName(weatherId: id))
+            let name = decodedData.name
+            let temp = decodedData.main.temp
+            
+            let weather = WeatherModel(conditionId: id, cityName: name, temperature: temp)
 
+           return weather
+            
         } catch {
-            print(error)
+            delegate?.didFailWithError(error: error)
+            return nil
         }
     }
     
-    func getConditionName (weatherId: Int) -> String{
-        switch weatherId {
-            
-        case 200...232:
-            return "cloud.bolt"
-            
-        case 300...321:
-            return "cloud.drizzle"
-            
-        case 500...531:
-            return "cloud.rain"
-            
-        case 600...622:
-            return "cloud.snow"
-            
-        case 700...781:
-            return "cloud.fog"
-        
-        case 800:
-            return "sun.max"
-            
-        case 801...804:
-            return "cloud.bolt"
-            
-        default:
-            return "cloud"
-        }
-    }
     
 }
